@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AutoFix</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="js/api.js"></script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // SECTION A: UTILITY FUNCTIONS
+        const getCurrentLocation = () => {
+            return new Promise((resolve) => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+                        () => resolve({ latitude: -4.0435, longitude: 39.6682 }) 
+                    );
+                } else {
+                    resolve({ latitude: -4.0435, longitude: 39.6682 });
+                }
+            });
+        };
+
+        const calculateServiceCost = (carType, problemType) => {
+            const baseCosts = {
+                'Sedan': { 'Engine': 3500, 'Brakes': 2000, 'Electrical': 1500, 'Transmission': 4000, 'Suspension': 2500, 'Other': 1000 },
+                'SUV': { 'Engine': 4500, 'Brakes': 2500, 'Electrical': 2000, 'Transmission': 5000, 'Suspension': 3000, 'Other': 1500 },
+                'Pickup': { 'Engine': 4000, 'Brakes': 2200, 'Electrical': 1800, 'Transmission': 4500, 'Suspension': 2800, 'Other': 1200 },
+                'Matatu': { 'Engine': 5500, 'Brakes': 3500, 'Electrical': 2500, 'Transmission': 6000, 'Suspension': 4000, 'Other': 2000 }
+            };
+            return baseCosts[carType]?.[problemType] || 1000;
+        };
+
+        // SECTION B: CAR OWNER DASHBOARD
+       function CarOwnerDashboard({ location, activeService, setActiveService }) {
+            const [showRequestForm, setShowRequestForm] = useState(false);
+            const [formData, setFormData] = useState({ carType: 'Sedan', problemType: 'Engine', description: '', depositPaid: true });
+
+            const handleSubmitRequest = async () => {
+                const payload = {
+                    ownerId: 1,
+                    carType: formData.carType,
+                    problemType: formData.problemType,
+                    description: formData.description,
+                    location: location
+            };
+            try {
+                const savedRequest = await api.createRequest(payload);
+                setActiveService(savedRequest);
+                setShowRequestForm(false);
+            } catch (err) {
+                alert("Failed to connect to backend server.");
+            }
+        };
+
+        return (
+            <div className="app-container">
+                <div className="gradient-bg text-white p-6">
+                    <h1 className="text-2xl font-bold">AutoFix</h1>
+                    <p className="text-sm opacity-90">Car Owner Dashboard</p>
+                </div>
+
+                <div className="p-4">
+                    {!activeService ? (
+                        showRequestForm ? (
+                            <div className="bg-white p-4 rounded-xl shadow-lg space-y-4 slide-up">
+                                <h2 className="font-bold text-lg">Request a Mechanic</h2>
+                                <select 
+                                    className="w-full p-2 border rounded"
+                                    onChange={(e) => setFormData({...formData, carType: e.target.value})}
+                                >
+                                    <option>Sedan</option><option>SUV</option><option>Pickup</option><option>Matatu</option>
+                                </select>
+                                <select 
+                                    className="w-full p-2 border rounded"
+                                    onChange={(e) => setFormData({...formData, problemType: e.target.value})}
+                                >
+                                    <option>Engine</option><option>Brakes</option><option>Electrical</option><option>Transmission</option>
+                                </select>
+                                <textarea 
+                                    placeholder="Describe the problem..." 
+                                    className="w-full p-2 border rounded"
+                                    onChange={(e) => setFormData({...formData, description: e.target.value})}
+                                />
+                                    <button onClick={handleSubmitRequest} className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold">
+                                        Confirm & Pay Deposit
+                                    </button>
+                                </div>
+                            ) : (
+                                <button onClick={() => setShowRequestForm(true)} className="w-full bg-purple-600 text-white py-12 rounded-2xl font-bold shadow-lg pulse">
+                                    <i className="fas fa-plus-circle text-3xl mb-2 block"></i>
+                                    Request Mechanic
+                                </button>
+                            )
+                        ) : (
+                            <div className="bg-white border rounded-xl p-6 shadow-lg text-center">
+                                <div className="status-indicator status-pending mb-2"></div>
+                                <h3 className="text-xl font-bold capitalize">Status: {activeService.status}</h3>
+                                <p className="text-gray-600 mt-2">A mechanic is reviewing your request for your {activeService.carType}.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // SECTION C: MECHANIC DASHBOARD
+        function MechanicDashboard({ location, activeService, setActiveService }) {
+            const [availableRequests, setAvailableRequests] = useState([]);
+
+            useEffect(() => {
+                const fetchJobs = async () => {
+                    try {
+                        const jobs = await api.getAvailableJobs();
+                        setAvailableRequests(jobs);
+                    } catch (e) { console.error("Polling error:", e); }
+                };
+                fetchJobs();
+                const interval = setInterval(fetchJobs, 10000); // Check every 10 seconds
+                return () => clearInterval(interval);
+            }, []);
+
+            const handleAcceptRequest = async (request) => {
+                if (confirm(`Accept this ${request.carType} job?`)) {
+                    const updated = await api.updateStatus(request.id, 'accepted', 2);
+                    setActiveService(updated);
+                    setAvailableRequests(prev => prev.filter(r => r.id !== request.id));
+                }
+            };
+
+            return (
+                <div className="app-container">
+                    <div className="gradient-bg text-white p-6">
+                        <h1 className="text-2xl font-bold">AutoFix</h1>
+                        <p className="text-sm opacity-90">Mechanic Dashboard</p>
+                    </div>
+
+                    <div className="p-4">
+                        {activeService ? (
+                            <div className="bg-white border-2 border-indigo-500 rounded-xl p-6 shadow-xl">
+                                <h2 className="text-lg font-bold text-indigo-900 mb-4">Active Job</h2>
+                                <div className="space-y-2 mb-6">
+                                    <p><strong>Vehicle:</strong> {activeService.carType}</p>
+                                    <p><strong>Problem:</strong> {activeService.problemType}</p>
+                                    <p><strong>Status:</strong> <span className="text-green-600 font-bold capitalize">{activeService.status}</span></p>
+                                </div>
+                                <button 
+                                    onClick={() => setActiveService({...activeService, status: 'completed'})}
+                                    className="w-full bg-green-600 text-white py-3 rounded-xl font-bold"
+                                >
+                                    Mark as Finished
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <h2 className="font-bold text-gray-700">Available Jobs ({availableRequests.length})</h2>
+                                {availableRequests.length === 0 ? (
+                                    <p className="text-gray-400 text-center py-10 italic">Searching for new requests...</p>
+                                ) : (
+                                    availableRequests.map(req => (
+                                        <div key={req.id} className="bg-white border p-4 rounded-xl shadow-md flex justify-between items-center">
+                                            <div>
+                                                <p className="font-bold text-gray-800">{req.carType}</p>
+                                                <p className="text-sm text-gray-500">{req.problemType}</p>
+                                            </div>
+                                            <button 
+                                                onClick={() => handleAcceptRequest(req)} 
+                                                className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold"
+                                            >
+                                                Accept
+                                            </button>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+        // SECTION D: USER SELECTION SCREEN
+        function UserTypeSelection({ setUserType }) {
+            return (
+                <div className="flex-1 flex flex-col justify-center p-6 space-y-4">
+                    <h2 className="text-xl font-bold text-center mb-6 text-gray-800">Who are you?</h2>
+                    <button onClick={() => setUserType('car-owner')} className="bg-white border-2 border-purple-500 p-6 rounded-2xl shadow-sm flex items-center space-x-4">
+                        <div className="bg-purple-100 p-4 rounded-xl text-purple-600"><i className="fas fa-car text-2xl"></i></div>
+                        <div className="text-left"><div className="font-bold text-purple-900">Car Owner</div></div>
+                    </button>
+                    <button onClick={() => setUserType('mechanic')} className="bg-white border-2 border-indigo-500 p-6 rounded-2xl shadow-sm flex items-center space-x-4">
+                        <div className="bg-indigo-100 p-4 rounded-xl text-indigo-600"><i className="fas fa-wrench text-2xl"></i></div>
+                        <div className="text-left"><div className="font-bold text-indigo-900">Mechanic</div></div>
+                    </button>
+                </div>
+            );
+        }
+
+        // SECTION E: MAIN CONTROLLER
+        function AutoFixApp() {
+            const [userType, setUserType] = useState(null);
+            const [location, setLocation] = useState(null);
+            const [activeService, setActiveService] = useState(null);
+
+            useEffect(() => {
+                if (userType) { getCurrentLocation().then(loc => setLocation(loc)); }
+            }, [userType]);
+
+            if (!userType) {
+                return (
+                    <div className="app-container flex flex-col">
+                        <div className="gradient-bg text-white p-10 text-center">
+                            <i className="fas fa-car-side text-6xl mb-4"></i>
+                            <h1 className="text-4xl font-bold">AutoFix</h1>
+                        </div>
+                        <UserTypeSelection setUserType={setUserType} />
+                    </div>
+                );
+            }
+
+            return (
+                <div className="app-container flex flex-col min-h-screen">
+                    {userType === 'car-owner' ? (
+                        <CarOwnerDashboard location={location} activeService={activeService} setActiveService={setActiveService} />
+                    ) : (
+                        <MechanicDashboard location={location} activeService={activeService} setActiveService={setActiveService} />
+                    )}
+                </div>
+            );
+        }
+
+        // SECTION F: RENDER
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<AutoFixApp />);
+    </script>
+</body>
+</html>
