@@ -8,3 +8,5 @@ services:
     buildCommand: npm install
     startCommand: node server.js
     env: node
+    domains:
+      -mechalink.com
