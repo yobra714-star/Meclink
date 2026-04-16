@@ -7,6 +7,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.get("/", (req, res) => {
+    res.json({
+        status: "running",
+        message: "AutoFix backend API is live "
+    });
+});  // added just to display website running
+
 // 1. Create a Service Request
 app.post('/api/requests', async (req, res) => {
     const { ownerId, carType, problemType, description, location } = req.body;
