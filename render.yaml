@@ -1,0 +1,8 @@
+# a YAML file that defines a set of interconnected services, databases, and environment groups.
+
+services:
+  - type: web
+  - name : Meclink
+  - repo : https://github.com/yobra714-star/Meclink
+  - domains : 
+      - mechanical.com
