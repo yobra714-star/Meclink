@@ -2,7 +2,11 @@
 
 services:
   - type: web
-  - name : Meclink
-  - repo : https://github.com/yobra714-star/Meclink
-  - domains : 
+    name: Meclink
+    repo: https://github.com/yobra714-star/Meclink
+    branch: main
+    buildCommand: npm install
+    startCommand: node server.js
+    env: node
+    domains:
       - mechanical.com
