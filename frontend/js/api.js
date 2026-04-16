@@ -1,6 +1,6 @@
 
 //UPDATED JS (static logic swapped with fetch to connect front end with backend)
-const API_BASE_URL = 'https://meclink.onrender.com'; //changed from local host to api url
+const API_BASE_URL = 'https://meclink.onrender.com/api'; //changed from local host to api url
 
 const api = {
     // Create a new request (Car Owner)
